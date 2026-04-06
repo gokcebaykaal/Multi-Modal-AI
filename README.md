@@ -272,4 +272,7 @@ Text → Chunk → Embedding → FAISS → Retrieval → Answer
 
 # ⭐ Not
 
-Bu proje, multi-modal AI sistemlerinin tek bir platformda nasıl birleşebileceğini göstermek amacıyla geliştirilmiştir.
+Bu proje, multi-modal AI sistemlerinin tek bir platformda nasıl birleşebileceğini göstermek amacıyla geliştirilmiştir
+ve geliştirilirken ChatGPT gibi yapay zekâ araçlarından destek alınmıştır.
+Ancak tüm mimari kararlar, entegrasyonlar ve nihai kodlar geliştirici tarafından
+düzenlenmiş ve doğrulanmıştır.
