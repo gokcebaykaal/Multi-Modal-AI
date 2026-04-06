@@ -1,16 +1,16 @@
-# 🧠 Multi-Modal AI
+# 🧠 Multi-Modal AI Platform
 
 ## 📌 Proje Tanımı
 
-Bu proje, kullanıcıdan alınan **görsel, PDF ve metin girdilerini işleyerek anlamlı ve açıklanabilir çıktılar üreten multi-modal bir yapay zekâ sistemidir**.
+Bu proje, kullanıcıdan alınan **görsel, PDF ve metin girdilerini işleyerek anlamlı, açıklanabilir ve bağlamsal çıktılar üreten multi-modal bir yapay zekâ sistemidir**.
 
-Sistem aşağıdaki üç ana yapay zekâ alanını birleştirir:
+Sistem aşağıdaki üç temel AI yaklaşımını bir araya getirir:
 
-- 🖼️ Computer Vision (Görüntü İşleme)
+- 🖼️ Computer Vision (Görüntü Analizi)
 - 📄 Retrieval-Augmented Generation (RAG)
 - 🧠 Explainable AI (Grad-CAM)
 
-Amaç, farklı veri türlerini tek bir sistem altında işleyebilen, kullanıcıya **tek ve birleşik cevap sunabilen ölçeklenebilir bir AI platformu** geliştirmektir.
+Amaç, farklı veri türlerini tek bir sistem altında işleyebilen, kullanıcıya **tek ve birleşik bir cevap sunabilen ölçeklenebilir bir AI platformu** geliştirmektir.
 
 ---
 
@@ -19,18 +19,23 @@ Amaç, farklı veri türlerini tek bir sistem altında işleyebilen, kullanıcı
 - Multi-modal veri işleme (image + pdf + text)
 - Explainable AI (Grad-CAM)
 - Retrieval tabanlı doküman analizi (RAG)
-- FastAPI ile ölçeklenebilir backend
+- LLM tabanlı cevap üretimi (opsiyonel)
+- FastAPI ile ölçeklenebilir backend mimarisi
 - Tek endpoint üzerinden birleşik sistem davranışı
 
 ---
 
 # 🏗️ Sistem Mimarisi
+
 | Katman | Açıklama |
 |--------|--------|
-| Frontend | HTML + JS |
+| Frontend | HTML + CSS + JS |
 | Backend | FastAPI |
-| AI | CV + RAG |
-| Model | MobileNetV2 + FAISS |
+| AI Katmanı | CV + RAG + NLP |
+| Model | MobileNetV2 + Sentence Transformers |
+| Vektör DB | FAISS (in-memory) |
+| Cache | Redis (opsiyonel) |
+| Background Jobs | FastAPI BackgroundTasks |
 
 ---
 
@@ -39,10 +44,12 @@ Amaç, farklı veri türlerini tek bir sistem altında işleyebilen, kullanıcı
 ### 1️⃣ Computer Vision Modülü
 
 - Model: MobileNetV2 (Transfer Learning)
-- Çıktılar:
-  - Sınıflandırma sonucu
-  - Confidence score
-  - Grad-CAM görsel açıklama
+- Kütüphaneler: PyTorch, Torchvision
+
+#### Çıktılar:
+- Sınıflandırma sonucu (label)
+- Confidence score (%)
+- Grad-CAM görsel açıklama (Explainable AI)
 
 ---
 
@@ -54,31 +61,43 @@ Amaç, farklı veri türlerini tek bir sistem altında işleyebilen, kullanıcı
 2. Chunking
 3. Embedding (Sentence Transformers)
 4. Similarity Search (FAISS)
-5. Answer Generation
+5. Context Retrieval
+6. Answer Generation (LLM veya extractive)
+
+#### Özellikler:
+
+- En alakalı chunk’lar bulunur
+- Kaynaklı cevap üretimi yapılır
+- Cache mekanizması ile hız artırılır
 
 ---
 
 ### 3️⃣ Multi-Modal Router
 
 - Girdi türünü otomatik algılar:
-  - image → CV
-  - pdf → RAG
-  - text → NLP
-- Tek endpoint: `/multi-query`
+  - image → CV pipeline
+  - pdf → RAG pipeline
+  - text → NLP / RAG
+
+- Tek endpoint:
+```
+POST /multi-query
+```
 
 ---
 
-# ⚙️ Kullanılan Teknolojiler
+## ⚙️ Kullanılan Teknolojiler
 
 | Teknoloji | Açıklama |
 |----------|--------|
 | FastAPI | Backend framework |
 | PyTorch | Deep Learning |
-| Torchvision | Model |
+| Torchvision | CV modelleri |
 | Sentence Transformers | Embedding |
-| FAISS | Vector Search |
+| FAISS | Vector similarity search |
 | PyMuPDF | PDF parsing |
 | OpenCV | Grad-CAM |
+| Redis | Cache (opsiyonel) |
 | HTML/CSS/JS | Frontend |
 
 ---
@@ -89,26 +108,50 @@ Amaç, farklı veri türlerini tek bir sistem altında işleyebilen, kullanıcı
 
 ```bash
 git clone https://github.com/kullaniciadi/multi-modal-ai.git
-cd multi-modal-ai/backend 
+cd multi-modal-ai/backend
 ```
 
 ## 2. Sanal ortam oluştur
 
+```bash
 python -m venv venv
-venv\Scripts\activate   # Windows
-source venv/bin/activate  # Linux/Mac
+```
+
+### Aktivasyon:
+
+Windows:
+```bash
+venv\Scripts\activate
+```
+
+Linux / Mac:
+```bash
+source venv/bin/activate
+```
+
+---
 
 ## 3. Gerekli paketleri yükle
 
+```bash
 pip install -r requirements.txt
+```
+
+---
 
 ## 4. Backend başlat
 
+```bash
 uvicorn app.main:app --reload
+```
+
+---
 
 ## 5. Frontend çalıştır
 
 frontend/index.html dosyasını tarayıcıda aç
+
+---
 
 ## 6. Swagger UI
 
@@ -116,109 +159,117 @@ http://127.0.0.1:8000/docs
 
 ---
 
-### 📡 API Dokümantasyonu
+# 📡 API Dokümantasyonu
 
 ## 🔹 1. Görsel Analiz
 
 Endpoint:
+```
 POST /analyze-image
-
-Input:
-image (file)
+```
 
 Output:
+```json
 {
   "label": "dog",
   "confidence": 92.3,
   "gradcam": "base64..."
 }
+```
+
+---
 
 ## 🔹 2. PDF Soru-Cevap
 
 Endpoint:
+```
 POST /ask-document
-
-Input:
-file: PDF
-question: string
+```
 
 Output:
+```json
 {
   "question": "...",
   "answer": "...",
   "sources": [...]
 }
+```
+
+---
 
 ## 🔹 3. Multi-Modal Endpoint
 
 Endpoint:
+```
 POST /multi-query
-
-Input:
-image / pdf / text (kombinasyon)
+```
 
 Output:
+```json
 {
   "mode": "image+text",
   "answer": "...",
   "label": "...",
   "confidence": 90
 }
+```
 
 ---
 
-### 🧪 Kullanım Senaryoları
+# 🧪 Kullanım Senaryoları
 
 ## 🖼️ Görsel Analiz
--Kullanıcı görsel yükler
--Sistem sınıflandırır
--Grad-CAM ile açıklama sunar
+- Kullanıcı görsel yükler  
+- Sistem sınıflandırır  
+- Grad-CAM ile açıklama sunar  
 
 ## 📄 PDF Analizi
--Kullanıcı PDF yükler
--Soru sorar
--Sistem ilgili parçaları bulur
--Kaynaklı cevap üretir
+- Kullanıcı PDF yükler  
+- Soru sorar  
+- Sistem ilgili parçaları bulur  
+- Kaynaklı cevap üretir  
 
 ## 🔀 Multi-Modal Kullanım
--Görsel + soru
--PDF + soru
--Sadece metin
-
-Sistem otomatik yönlendirme yapar ve tek cevap üretir.
+- Görsel + soru  
+- PDF + soru  
+- Sadece metin  
 
 ---
 
-### 📊 RAG Detayları
+# 📊 RAG Detayları
 
-Kullanılan yapı:
 Text → Chunk → Embedding → FAISS → Retrieval → Answer
 
-Not:
-FAISS in-memory çalışır
-Kalıcı vector DB yoktur
-LLM entegrasyonu opsiyoneldir
+- FAISS in-memory çalışır  
+- Kalıcı vector DB yoktur  
+- LLM entegrasyonu opsiyoneldir  
 
 ---
 
-## 📦 Örnek Veri
+# ⚡ Performans
 
-Test için:
-herhangi bir PDF
-ImageNet sınıfı içeren görseller yüklenebilir.
-
----
-
-### 🛠️ Geliştirme Alanları
-
-Redis cache
-Celery background jobs
-LLM integration
-Docker deployment
-ChromaDB / Pinecone
+- Cache (Redis) ile hızlandırma  
+- BackgroundTasks ile async işlem  
+- Chunking ile optimizasyon  
 
 ---
 
-### 👩‍💻Geliştirici
-Gökçe Baykal
+# 🛠️ Geliştirme Alanları
 
+- Redis cache geliştirme  
+- Celery queue sistemi  
+- LLM entegrasyonu (GPT / LLaMA)  
+- Docker deployment  
+- ChromaDB / Pinecone  
+
+---
+
+# 👩‍💻 Geliştirici
+
+**Gökçe Baykal**
+
+---
+
+# ⭐ Not
+
+Bu proje, multi-modal AI sistemlerinin tek bir platformda nasıl birleşebileceğini göstermek amacıyla geliştirilmiştir.
