@@ -6,23 +6,26 @@ import numpy as np
 import cv2
 import io
 import base64
+import logging
 
-# MODEL YÜKLEME
+logger = logging.getLogger(__name__)
+
+logger.info("MobileNetV2 modeli yükleniyor...")
 weights = MobileNet_V2_Weights.DEFAULT
 model = mobilenet_v2(weights=weights)
 model.eval()
+logger.info("MobileNetV2 modeli başarıyla yüklendi.")
 
-# sınıf isimleri
 class_names = weights.meta["categories"]
 
-# transform
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
 ])
 
-# GRAD-CAM
 def generate_gradcam(model, image_tensor):
+    logger.info("Grad-CAM üretimi başladı.")
+
     gradients = []
     activations = []
 
@@ -58,38 +61,52 @@ def generate_gradcam(model, image_tensor):
     h1.remove()
     h2.remove()
 
+    logger.info("Grad-CAM üretimi tamamlandı.")
     return cam
 
+
 def analyze_uploaded_image(file_bytes: bytes):
+    logger.info("Görsel analiz süreci başladı.")
 
-    image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+    try:
+        image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+        logger.info("Görsel başarıyla yüklendi ve RGB formatına dönüştürüldü.")
 
-    input_tensor = transform(image).unsqueeze(0)
+        input_tensor = transform(image).unsqueeze(0)
+        logger.info("Görsel preprocess işlemi tamamlandı.")
 
-    with torch.no_grad():
-        outputs = model(input_tensor)
-        probs = torch.nn.functional.softmax(outputs, dim=1)
+        with torch.no_grad():
+            outputs = model(input_tensor)
+            probs = torch.nn.functional.softmax(outputs, dim=1)
 
-    confidence, pred = torch.max(probs, 1)
+        confidence, pred = torch.max(probs, 1)
 
-    label = class_names[pred.item()]
-    confidence = round(confidence.item() * 100, 2)
+        label = class_names[pred.item()]
+        confidence = round(confidence.item() * 100, 2)
 
-    cam = generate_gradcam(model, input_tensor)
+        logger.info(f"Tahmin tamamlandı | label={label} confidence={confidence}")
 
-    img_np = np.array(image.resize((224, 224)))
+        cam = generate_gradcam(model, input_tensor)
 
-    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
-    overlay = heatmap * 0.4 + img_np * 0.6
+        img_np = np.array(image.resize((224, 224)))
 
-    _, buffer = cv2.imencode(".jpg", overlay.astype(np.uint8))
-    gradcam_base64 = base64.b64encode(buffer).decode()
+        heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
+        overlay = heatmap * 0.4 + img_np * 0.6
 
-    explanation = f"Model bu görseli '{label}' olarak sınıflandırdı."
+        _, buffer = cv2.imencode(".jpg", overlay.astype(np.uint8))
+        gradcam_base64 = base64.b64encode(buffer).decode()
 
-    return {
-        "label": label,
-        "confidence": confidence,
-        "explanation": explanation,
-        "gradcam": gradcam_base64
-    }
+        explanation = f"Model bu görseli '{label}' olarak sınıflandırdı."
+
+        logger.info("Görsel analiz süreci başarıyla tamamlandı.")
+
+        return {
+            "label": label,
+            "confidence": confidence,
+            "explanation": explanation,
+            "gradcam": gradcam_base64
+        }
+
+    except Exception as e:
+        logger.exception(f"Görsel analiz sırasında hata oluştu: {str(e)}")
+        raise

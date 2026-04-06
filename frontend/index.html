@@ -333,6 +333,49 @@
       }
     }
 
+    function normalizeResponse(rawData, fallbackMode = "-") {
+      const payload = rawData?.data ?? rawData ?? {};
+
+      return {
+        success: rawData?.success ?? true,
+        mode: rawData?.mode ?? payload?.mode ?? fallbackMode,
+        question: payload?.question ?? rawData?.question ?? "-",
+        answer: payload?.answer ?? rawData?.answer ?? "-",
+        sources: payload?.sources ?? rawData?.sources ?? [],
+        file_type: payload?.file_type ?? rawData?.file_type ?? "",
+        label: payload?.label ?? rawData?.label ?? "",
+        confidence: payload?.confidence ?? rawData?.confidence ?? null,
+        explanation: payload?.explanation ?? rawData?.explanation ?? "",
+        gradcam: payload?.gradcam ?? rawData?.gradcam ?? "",
+        message: rawData?.message ?? ""
+      };
+    }
+
+    function renderSourcesResult(rawData, fallbackQuestion, fallbackMode = "pdf") {
+      const data = normalizeResponse(rawData, fallbackMode);
+
+      return `
+        <p><strong>Mod:</strong> ${data.mode ?? fallbackMode}</p>
+        <p><strong>Soru:</strong> ${data.question ?? fallbackQuestion}</p>
+        <p><strong>Cevap:</strong><br>${(data.answer ?? "-").replace(/\n/g, "<br>")}</p>
+        ${
+          data.file_type ? `<p><strong>Dosya Türü:</strong> ${data.file_type}</p>` : ""
+        }
+        <p><strong>Kaynaklar:</strong></p>
+        ${
+          data.sources && data.sources.length > 0
+            ? data.sources.map((item, i) => `
+              <div style="margin-top:10px; padding:10px; background:white; border:1px solid #ddd; border-radius:10px;">
+                <strong>Kaynak ${i + 1}</strong>${item.score !== undefined ? ` (skor: ${Number(item.score).toFixed(3)})` : ""}<br>
+                ${item.chunk_id !== undefined ? `<strong>Chunk ID:</strong> ${item.chunk_id}<br><br>` : "<br>"}
+                ${item.chunk ? item.chunk.replace(/\n/g, "<br>") : "-"}
+              </div>
+            `).join("")
+            : "Kaynak bulunamadı."
+        }
+      `;
+    }
+
     async function uploadImage() {
       const fileInput = document.getElementById("fileInput");
       const resultBox = document.getElementById("imageResult");
@@ -365,7 +408,8 @@
           throw new Error("Sunucu hatası");
         }
 
-        const data = await response.json();
+        const rawData = await response.json();
+        const data = normalizeResponse(rawData, "image");
 
         resultBox.innerHTML = `
           <p><strong>Tahmin:</strong> ${data.label ?? "-"}</p>
@@ -380,6 +424,7 @@
           gradcamPreview.style.display = "none";
         }
       } catch (error) {
+        console.error("Görsel analizi hatası:", error);
         resultBox.innerHTML = '<div class="error">Görsel analizi sırasında hata oluştu.</div>';
         gradcamPreview.style.display = "none";
       }
@@ -413,14 +458,17 @@
           body: formData
         });
 
+        const rawData = await response.json();
+        console.log("ask-document cevabı:", rawData);
+
         if (!response.ok) {
-          throw new Error("Sunucu hatası");
+          throw new Error(rawData?.error?.message || "Sunucu hatası");
         }
 
-        const data = await response.json();
-        resultBox.innerHTML = renderSourcesResult(data, question);
+        resultBox.innerHTML = renderSourcesResult(rawData, question, "pdf");
       } catch (error) {
-        resultBox.innerHTML = '<div class="error">PDF analizi sırasında hata oluştu.</div>';
+        console.error("PDF analizi hatası:", error);
+        resultBox.innerHTML = `<div class="error">PDF analizi sırasında hata oluştu: ${error.message}</div>`;
       }
     }
 
@@ -444,124 +492,108 @@
           body: formData
         });
 
-        if (!response.ok) {
-          throw new Error("Sunucu hatası");
-        }
+        const rawData = await response.json();
+        const data = normalizeResponse(rawData, "text");
 
-        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(rawData?.error?.message || "Sunucu hatası");
+        }
 
         resultBox.innerHTML = `
           <p><strong>Soru:</strong> ${data.question ?? question}</p>
           <p><strong>Cevap:</strong> ${data.answer ?? "-"}</p>
         `;
       } catch (error) {
+        console.error("Metin sorgu hatası:", error);
         resultBox.innerHTML = '<div class="error">Metin tabanlı soru sırasında hata oluştu.</div>';
       }
     }
 
-    
     async function handleMainInput() {
-    const text = document.getElementById("mainPrompt").value.trim();
-    const fileInput = document.getElementById("mainFile");
-    const file = fileInput.files[0];
-    const resultBox = document.getElementById("mainResult");
-    const mainImagePreview = document.getElementById("mainImagePreview");
-    const mainGradcamPreview = document.getElementById("mainGradcamPreview");
+      const text = document.getElementById("mainPrompt").value.trim();
+      const fileInput = document.getElementById("mainFile");
+      const file = fileInput.files[0];
+      const resultBox = document.getElementById("mainResult");
+      const mainImagePreview = document.getElementById("mainImagePreview");
+      const mainGradcamPreview = document.getElementById("mainGradcamPreview");
 
-    mainImagePreview.style.display = "none";
-    mainGradcamPreview.style.display = "none";
+      mainImagePreview.style.display = "none";
+      mainGradcamPreview.style.display = "none";
 
-    if (!file && !text) {
-      resultBox.innerHTML = '<div class="error">Bir metin yazın veya dosya seçin.</div>';
-      return;
-    }
-
-    resultBox.innerHTML = '<div class="loading">İşleniyor...</div>';
-
-    const formData = new FormData();
-    if (text) formData.append("question", text);
-    if (file) formData.append("file", file);
-
-    if (file && file.type.startsWith("image/")) {
-      mainImagePreview.src = URL.createObjectURL(file);
-      mainImagePreview.style.display = "block";
-    }
-
-    try {
-      const response = await fetch("http://127.0.0.1:8000/multi-query", {
-        method: "POST",
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error("Sunucu hatası");
+      if (!file && !text) {
+        resultBox.innerHTML = '<div class="error">Bir metin yazın veya dosya seçin.</div>';
+        return;
       }
 
-      const data = await response.json();
+      resultBox.innerHTML = '<div class="loading">İşleniyor...</div>';
 
-      resultBox.innerHTML = `
-  <p><strong>Mod:</strong> ${data.mode ?? "-"}</p>
-  <p><strong>Soru:</strong> ${data.question ?? "-"}</p>
-  <p><strong>Cevap:</strong><br>${(data.answer ?? "-").replace(/\n/g, "<br>")}</p>
-  ${
-    data.file_type ? `<p><strong>Dosya Türü:</strong> ${data.file_type}</p>` : ""
-  }
-  ${
-    data.label ? `<p><strong>Tahmin:</strong> ${data.label}</p>` : ""
-  }
-  ${
-    data.confidence !== undefined && data.confidence !== null
-      ? `<p><strong>Güven Oranı:</strong> %${data.confidence}</p>`
-      : ""
-  }
-  ${
-    data.explanation ? `<p><strong>Açıklama:</strong> ${data.explanation}</p>` : ""
-  }
-  ${
-    data.sources && data.sources.length > 0
-      ? `
-        <p><strong>Kaynaklar:</strong></p>
-        ${data.sources.map((item, i) => `
-          <div style="margin-top:10px; padding:10px; background:white; border:1px solid #ddd; border-radius:10px;">
-            <strong>Kaynak ${i + 1}</strong>${item.score !== undefined ? ` (skor: ${Number(item.score).toFixed(3)})` : ""}<br><br>
-            ${item.chunk ? item.chunk.replace(/\n/g, "<br>") : "-"}
-          </div>
-        `).join("")}
-      `
-      : ""
-  }
-`;
+      const formData = new FormData();
+      if (text) formData.append("question", text);
+      if (file) formData.append("file", file);
 
-if (data.gradcam) {
-  mainGradcamPreview.src = "data:image/jpeg;base64," + data.gradcam;
-  mainGradcamPreview.style.display = "block";
-}
-    } catch (error) {
-      resultBox.innerHTML = '<div class="error">Ana bar üzerinden multi-query sırasında hata oluştu.</div>';
+      if (file && file.type.startsWith("image/")) {
+        mainImagePreview.src = URL.createObjectURL(file);
+        mainImagePreview.style.display = "block";
+      }
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/multi-query", {
+          method: "POST",
+          body: formData
+        });
+
+        const rawData = await response.json();
+        console.log("multi-query cevabı:", rawData);
+
+        if (!response.ok) {
+          throw new Error(rawData?.error?.message || "Sunucu hatası");
+        }
+
+        const data = normalizeResponse(rawData, "multi");
+
+        resultBox.innerHTML = `
+          <p><strong>Mod:</strong> ${data.mode ?? "-"}</p>
+          <p><strong>Soru:</strong> ${data.question ?? text ?? "-"}</p>
+          <p><strong>Cevap:</strong><br>${(data.answer ?? "-").replace(/\n/g, "<br>")}</p>
+          ${
+            data.file_type ? `<p><strong>Dosya Türü:</strong> ${data.file_type}</p>` : ""
+          }
+          ${
+            data.label ? `<p><strong>Tahmin:</strong> ${data.label}</p>` : ""
+          }
+          ${
+            data.confidence !== undefined && data.confidence !== null
+              ? `<p><strong>Güven Oranı:</strong> %${data.confidence}</p>`
+              : ""
+          }
+          ${
+            data.explanation ? `<p><strong>Açıklama:</strong> ${data.explanation}</p>` : ""
+          }
+          ${
+            data.sources && data.sources.length > 0
+              ? `
+                <p><strong>Kaynaklar:</strong></p>
+                ${data.sources.map((item, i) => `
+                  <div style="margin-top:10px; padding:10px; background:white; border:1px solid #ddd; border-radius:10px;">
+                    <strong>Kaynak ${i + 1}</strong>${item.score !== undefined ? ` (skor: ${Number(item.score).toFixed(3)})` : ""}<br>
+                    ${item.chunk_id !== undefined ? `<strong>Chunk ID:</strong> ${item.chunk_id}<br><br>` : "<br>"}
+                    ${item.chunk ? item.chunk.replace(/\n/g, "<br>") : "-"}
+                  </div>
+                `).join("")}
+              `
+              : ""
+          }
+        `;
+
+        if (data.gradcam) {
+          mainGradcamPreview.src = "data:image/jpeg;base64," + data.gradcam;
+          mainGradcamPreview.style.display = "block";
+        }
+      } catch (error) {
+        console.error("Multi-query hatası:", error);
+        resultBox.innerHTML = `<div class="error">Ana bar üzerinden multi-query sırasında hata oluştu: ${error.message}</div>`;
+      }
     }
-  }
-
-  function renderSourcesResult(data, fallbackQuestion) {
-    return `
-      <p><strong>Mod:</strong> ${data.mode ?? "-"}</p>
-      <p><strong>Soru:</strong> ${data.question ?? fallbackQuestion}</p>
-      <p><strong>Cevap:</strong><br>${(data.answer ?? "-").replace(/\n/g, "<br>")}</p>
-      ${
-        data.file_type ? `<p><strong>Dosya Türü:</strong> ${data.file_type}</p>` : ""
-      }
-      <p><strong>Kaynaklar:</strong></p>
-      ${
-        data.sources && data.sources.length > 0
-          ? data.sources.map((item, i) => `
-            <div style="margin-top:10px; padding:10px; background:white; border:1px solid #ddd; border-radius:10px;">
-              <strong>Kaynak ${i + 1}</strong>${item.score !== undefined ? ` (skor: ${Number(item.score).toFixed(3)})` : ""}<br><br>
-              ${item.chunk ? item.chunk.replace(/\n/g, "<br>") : "-"}
-            </div>
-          `).join("")
-          : "Kaynak bulunamadı."
-      }
-    `;
-  }
-</script>
+  </script>
 </body>
 </html>

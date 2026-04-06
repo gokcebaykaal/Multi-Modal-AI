@@ -1,5 +1,12 @@
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form
+import logging
+import hashlib
+import io
+
+from app.core.exceptions import AppException
+from app.core.cache import make_cache_key, get_cache, set_cache
+from app.core.settings import settings
 from app.services.document_service import (
     extract_text_from_pdf,
     chunk_text,
@@ -9,6 +16,7 @@ from app.services.document_service import (
 from app.services.image_service import analyze_uploaded_image
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/multi-query")
@@ -16,68 +24,79 @@ async def multi_query(
     question: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None)
 ):
-    try:
-        q = (question or "").strip()
+    q = (question or "").strip()
 
-        if not file and not q:
-            return {
-                "mode": "empty",
-                "question": question,
-                "answer": "Lütfen bir soru yazın veya bir dosya yükleyin.",
-                "sources": []
-            }
+    if not file and not q:
+        raise AppException(
+            "Lütfen bir soru yazın veya bir dosya yükleyin.",
+            400,
+            "EMPTY_INPUT"
+        )
 
-        # SADECE METİN
-        if not file and q:
-            lower_q = q.lower()
+    logger.info(f"Multi-query başladı | question={q} file={file.filename if file else None}")
 
-            if "python" in lower_q:
-                answer = "Python, yüksek seviyeli, okunabilirliği kolay bir programlama dilidir."
-            elif "yapay zeka" in lower_q:
-                answer = "Yapay zeka, makinelerin insan benzeri düşünme ve öğrenme yeteneği kazanmasını sağlayan bir alandır."
-            elif "merhaba" in lower_q:
-                answer = "Merhaba! Size nasıl yardımcı olabilirim?"
-            else:
-                answer = f"Sorunuz alındı: '{q}'. Bu demo sürümde sınırlı cevap verilmektedir."
+    if not file and q:
+        lower_q = q.lower()
 
-            return {
-                "mode": "text",
+        if "python" in lower_q:
+            answer = "Python, yüksek seviyeli, okunabilirliği kolay bir programlama dilidir."
+        elif "yapay zeka" in lower_q:
+            answer = "Yapay zeka, makinelerin insan benzeri düşünme ve öğrenme yeteneği kazanmasını sağlayan bir alandır."
+        elif "merhaba" in lower_q:
+            answer = "Merhaba! Size nasıl yardımcı olabilirim?"
+        else:
+            answer = f"Sorunuz alındı: '{q}'. Bu demo sürümde sınırlı cevap verilmektedir."
+
+        logger.info("Text mode tamamlandı")
+
+        return {
+            "success": True,
+            "mode": "text",
+            "data": {
                 "question": q,
                 "answer": answer,
                 "sources": []
             }
+        }
 
-        if file:
-            content_type = file.content_type or ""
+    if file:
+        content_type = file.content_type or ""
+        logger.info(f"Dosya tipi: {content_type}")
 
-            # GÖRSEL
-            if content_type.startswith("image/"):
-                file_bytes = await file.read()
-                image_result = analyze_uploaded_image(file_bytes)
+        if content_type.startswith("image/"):
+            file_bytes = await file.read()
+            image_result = analyze_uploaded_image(file_bytes)
 
-                label = image_result.get("label")
-                confidence = image_result.get("confidence")
-                explanation = image_result.get("explanation")
-                gradcam = image_result.get("gradcam")
+            if not image_result:
+                raise AppException("Görsel analiz edilemedi.", 500, "IMAGE_FAILED")
 
-                if q:
-                    answer = (
-                        f"Görsel analiz sonucu: {label}. "
-                        f"Güven oranı: %{confidence}. "
-                        f"Açıklama: {explanation}. "
-                        f"Kullanıcı sorusu: {q}"
-                    )
-                    mode = "image+text"
-                else:
-                    answer = (
-                        f"Görsel analiz sonucu: {label}. "
-                        f"Güven oranı: %{confidence}. "
-                        f"Açıklama: {explanation}."
-                    )
-                    mode = "image"
+            label = image_result.get("label")
+            confidence = image_result.get("confidence")
+            explanation = image_result.get("explanation")
+            gradcam = image_result.get("gradcam")
 
-                return {
-                    "mode": mode,
+            if q:
+                answer = (
+                    f"Görsel analiz sonucu: {label}. "
+                    f"Güven oranı: %{confidence}. "
+                    f"Açıklama: {explanation}. "
+                    f"Kullanıcı sorusu: {q}"
+                )
+                mode = "image+text"
+            else:
+                answer = (
+                    f"Görsel analiz sonucu: {label}. "
+                    f"Güven oranı: %{confidence}. "
+                    f"Açıklama: {explanation}."
+                )
+                mode = "image"
+
+            logger.info("Image mode tamamlandı")
+
+            return {
+                "success": True,
+                "mode": mode,
+                "data": {
                     "question": q,
                     "answer": answer,
                     "sources": [],
@@ -87,52 +106,81 @@ async def multi_query(
                     "explanation": explanation,
                     "gradcam": gradcam
                 }
-
-            # PDF
-            if content_type == "application/pdf":
-                if not q:
-                    return {
-                        "mode": "pdf",
-                        "question": q,
-                        "answer": "PDF yüklendi. Lütfen PDF hakkında bir soru da yazın.",
-                        "sources": [],
-                        "file_type": "pdf"
-                    }
-
-                text = await extract_text_from_pdf(file)
-                chunks = chunk_text(text)
-                retrieved = retrieve_relevant_chunks(q, chunks, top_k=3)
-
-                if not retrieved:
-                    return {
-                        "mode": "pdf",
-                        "question": q,
-                        "answer": "PDF içinde ilgili bilgi bulunamadı.",
-                        "sources": [],
-                        "file_type": "pdf"
-                    }
-
-                answer = generate_rag_answer(q, retrieved)
-
-                return {
-                    "mode": "pdf",
-                    "question": q,
-                    "answer": answer,
-                    "sources": retrieved,
-                    "file_type": "pdf"
-                }
-
-            return {
-                "mode": "unsupported",
-                "question": q,
-                "answer": f"Desteklenmeyen dosya türü: {content_type}",
-                "sources": []
             }
 
-    except Exception as e:
-        return {
-            "mode": "error",
-            "question": question,
-            "answer": f"Hata oluştu: {str(e)}",
-            "sources": []
-        }
+        if content_type == "application/pdf":
+            if not q:
+                raise AppException(
+                    "PDF ile birlikte bir soru da gönderilmelidir.",
+                    400,
+                    "QUESTION_REQUIRED"
+                )
+
+            pdf_bytes = await file.read()
+            pdf_hash = hashlib.md5(pdf_bytes).hexdigest()
+
+            cache_payload = f"{pdf_hash}:{q}"
+            cache_key = make_cache_key("multi_pdf", cache_payload)
+
+            cached_response = get_cache(cache_key)
+            if cached_response:
+                return {
+                    "success": True,
+                    "mode": "pdf",
+                    "message": "Cevap cache üzerinden getirildi.",
+                    "data": cached_response
+                }
+
+            temp_file = UploadFile(filename=file.filename, file=io.BytesIO(pdf_bytes))
+
+            text = await extract_text_from_pdf(temp_file)
+
+            if not text or not text.strip():
+                raise AppException("PDF içeriği okunamadı.", 400, "EMPTY_DOCUMENT")
+
+            chunks = chunk_text(text)
+
+            if not chunks:
+                raise AppException("Chunk oluşturulamadı.", 500, "CHUNK_FAILED")
+
+            retrieved = retrieve_relevant_chunks(q, chunks, top_k=3)
+
+            if not retrieved:
+                response_data = {
+                    "question": q,
+                    "answer": "PDF içinde ilgili bilgi bulunamadı.",
+                    "sources": [],
+                    "file_type": "pdf"
+                }
+                set_cache(cache_key, response_data, settings.CACHE_EXPIRE_SECONDS)
+
+                return {
+                    "success": True,
+                    "mode": "pdf",
+                    "data": response_data
+                }
+
+            answer = generate_rag_answer(q, retrieved)
+
+            response_data = {
+                "question": q,
+                "answer": answer,
+                "sources": retrieved,
+                "file_type": "pdf"
+            }
+
+            set_cache(cache_key, response_data, settings.CACHE_EXPIRE_SECONDS)
+
+            logger.info("PDF mode tamamlandı ve cache'e yazıldı")
+
+            return {
+                "success": True,
+                "mode": "pdf",
+                "data": response_data
+            }
+
+        raise AppException(
+            f"Desteklenmeyen dosya türü: {content_type}",
+            400,
+            "UNSUPPORTED_FILE"
+        )

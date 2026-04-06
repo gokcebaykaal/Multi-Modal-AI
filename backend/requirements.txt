@@ -16,3 +16,6 @@ openai
 PyMuPDF
 
 redis
+
+pydantic
+pydantic-settings
