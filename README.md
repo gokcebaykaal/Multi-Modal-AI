@@ -25,14 +25,12 @@ Amaç, farklı veri türlerini tek bir sistem altında işleyebilen, kullanıcı
 ---
 
 # 🏗️ Sistem Mimarisi
-Frontend (HTML + JS)
-↓
-FastAPI Backend
-↓
-| Image Service (CV) |
-| Document Service (RAG) |
-↓
-Model + FAISS + GradCAM
+| Katman | Açıklama |
+|--------|--------|
+| Frontend | HTML + JS |
+| Backend | FastAPI |
+| AI | CV + RAG |
+| Model | MobileNetV2 + FAISS |
 
 ---
 
