@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi Modal AI</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #eef1f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #1f2937;
+    }
+
+    .app-frame {
+      width: 92%;
+      max-width: 1100px;
+      min-height: 700px;
+      background: #f8fafc;
+      border: 2px solid #d1d5db;
+      border-radius: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+      padding: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .center-panel {
+      width: 100%;
+      max-width: 760px;
+      text-align: center;
+    }
+
+    .title {
+      font-size: 42px;
+      font-weight: 700;
+      margin-bottom: 28px;
+      color: #111827;
+    }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      background: white;
+      border: 2px solid #d1d5db;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.04);
+    }
+
+    .search-bar input {
+      flex: 1;
+      border: none;
+      outline: none;
+      padding: 18px 20px;
+      font-size: 18px;
+      background: transparent;
+    }
+
+    .search-bar button {
+      border: none;
+      background: #2563eb;
+      color: white;
+      padding: 18px 24px;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .top-upload {
+      margin-top: 12px;
+      text-align: left;
+    }
+
+    .top-upload input[type="file"] {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 10px;
+      font-size: 14px;
+      background: white;
+    }
+
+    .mode-grid {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin: 30px 0;
+    }
+
+    .mode-card {
+      width: 210px;
+      background: white;
+      border: 2px solid #dbe3ea;
+      border-radius: 22px;
+      padding: 22px 18px;
+      cursor: pointer;
+      transition: 0.2s ease;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.04);
+    }
+
+    .mode-card:hover {
+      transform: translateY(-4px);
+      border-color: #2563eb;
+    }
+
+    .mode-card.active {
+      border-color: #2563eb;
+      box-shadow: 0 10px 24px rgba(37,99,235,0.12);
+    }
+
+    .mode-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    .mode-title {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .mode-desc {
+      font-size: 14px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+
+    .action-panel {
+      margin-top: 24px;
+      display: none;
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 20px;
+      padding: 22px;
+      text-align: left;
+    }
+
+    .action-panel.active {
+      display: block;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .field input[type="file"],
+    .field textarea {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 15px;
+      background: #f8fafc;
+    }
+
+    .field textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    .primary-btn {
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .result-box {
+      margin-top: 18px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 16px;
+      min-height: 80px;
+    }
+
+    #preview,
+    #gradcamPreview,
+    #mainImagePreview,
+    #mainGradcamPreview {
+      display: none;
+      max-width: 100%;
+      max-height: 260px;
+      margin-top: 12px;
+      border-radius: 14px;
+      border: 1px solid #d1d5db;
+    }
+
+    .error {
+      color: #dc2626;
+      font-weight: 700;
+    }
+
+    .loading {
+      color: #d97706;
+      font-weight: 700;
+    }
+
+    .main-result {
+      margin-top: 20px;
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 20px;
+      padding: 18px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-frame">
+    <div class="center-panel">
+      <div class="title">Multi Modal AI</div>
+
+      <div class="search-bar">
+        <input id="mainPrompt" type="text" placeholder="Bir şey sor, görsel analiz et veya PDF hakkında soru sor..." />
+        <button onclick="handleMainInput()">▶</button>
+      </div>
+
+      <div class="top-upload">
+        <input type="file" id="mainFile" accept="image/*,application/pdf" />
+      </div>
+
+      <div class="mode-grid">
+        <div class="mode-card" onclick="selectMode('image')" id="imageCard">
+          <div class="mode-icon">🖼️</div>
+          <div class="mode-title">Görsel</div>
+          <div class="mode-desc">Görsel yükle, sınıflandırma sonucu ve Grad-CAM çıktısını gör.</div>
+        </div>
+
+        <div class="mode-card" onclick="selectMode('pdf')" id="pdfCard">
+          <div class="mode-icon">📄</div>
+          <div class="mode-title">PDF</div>
+          <div class="mode-desc">PDF yükle, soru sor ve kaynak destekli cevap al.</div>
+        </div>
+
+        <div class="mode-card" onclick="selectMode('text')" id="textCard">
+          <div class="mode-icon">📝</div>
+          <div class="mode-title">Metin</div>
+          <div class="mode-desc">Genel bilgi sorusu sor, yapay zekâ doğrudan cevap versin.</div>
+        </div>
+      </div>
+
+      <div class="main-result" id="mainResultBox">
+        <div id="mainResult">Henüz bir işlem yapılmadı.</div>
+        <img id="mainImagePreview" alt="Ana görsel önizleme" />
+        <img id="mainGradcamPreview" alt="Ana Grad-CAM sonucu" />
+      </div>
+
+      <div class="action-panel" id="imagePanel">
+        <div class="field">
+          <label>Görsel seç</label>
+          <input type="file" id="fileInput" accept="image/*" />
+        </div>
+
+        <button class="primary-btn" onclick="uploadImage()">Görseli Analiz Et</button>
+
+        <div class="result-box">
+          <img id="preview" alt="önizleme" />
+          <div id="imageResult">Henüz analiz yapılmadı.</div>
+          <img id="gradcamPreview" alt="gradcam" />
+        </div>
+      </div>
+
+      <div class="action-panel" id="pdfPanel">
+        <div class="field">
+          <label>PDF seç</label>
+          <input type="file" id="pdfFile" accept="application/pdf" />
+        </div>
+
+        <div class="field">
+          <label>Sorun</label>
+          <textarea id="question" placeholder="Bu dokümanda hangi teknik gereksinimler yer alıyor?"></textarea>
+        </div>
+
+        <button class="primary-btn" onclick="askDocument()">PDF'ye Sor</button>
+
+        <div class="result-box" id="documentResult">
+          Henüz soru gönderilmedi.
+        </div>
+      </div>
+
+      <div class="action-panel" id="textPanel">
+        <div class="field">
+          <label>Sorun</label>
+          <textarea id="textQuestion" placeholder="Taylor Swift kimdir?"></textarea>
+        </div>
+
+        <button class="primary-btn" onclick="askText()">Sor</button>
+
+        <div class="result-box" id="textResult">
+          Henüz soru gönderilmedi.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function selectMode(mode) {
+      const cards = ["imageCard", "pdfCard", "textCard"];
+      const panels = ["imagePanel", "pdfPanel", "textPanel"];
+
+      cards.forEach(id => document.getElementById(id).classList.remove("active"));
+      panels.forEach(id => document.getElementById(id).classList.remove("active"));
+
+      if (mode === "image") {
+        document.getElementById("imageCard").classList.add("active");
+        document.getElementById("imagePanel").classList.add("active");
+      } else if (mode === "pdf") {
+        document.getElementById("pdfCard").classList.add("active");
+        document.getElementById("pdfPanel").classList.add("active");
+      } else if (mode === "text") {
+        document.getElementById("textCard").classList.add("active");
+        document.getElementById("textPanel").classList.add("active");
+      }
+    }
+
+    async function uploadImage() {
+      const fileInput = document.getElementById("fileInput");
+      const resultBox = document.getElementById("imageResult");
+      const preview = document.getElementById("preview");
+      const gradcamPreview = document.getElementById("gradcamPreview");
+      const file = fileInput.files[0];
+
+      if (!file) {
+        resultBox.innerHTML = '<div class="error">Lütfen önce bir görsel seçin.</div>';
+        preview.style.display = "none";
+        gradcamPreview.style.display = "none";
+        return;
+      }
+
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = "block";
+      gradcamPreview.style.display = "none";
+      resultBox.innerHTML = '<div class="loading">Analiz yapılıyor...</div>';
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/analyze-image", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error("Sunucu hatası");
+        }
+
+        const data = await response.json();
+
+        resultBox.innerHTML = `
+          <p><strong>Tahmin:</strong> ${data.label ?? "-"}</p>
+          <p><strong>Güven Oranı:</strong> %${data.confidence ?? "-"}</p>
+          <p><strong>Açıklama:</strong> ${data.explanation ?? "-"}</p>
+        `;
+
+        if (data.gradcam) {
+          gradcamPreview.src = "data:image/jpeg;base64," + data.gradcam;
+          gradcamPreview.style.display = "block";
+        } else {
+          gradcamPreview.style.display = "none";
+        }
+      } catch (error) {
+        resultBox.innerHTML = '<div class="error">Görsel analizi sırasında hata oluştu.</div>';
+        gradcamPreview.style.display = "none";
+      }
+    }
+
+    async function askDocument() {
+      const pdfInput = document.getElementById("pdfFile");
+      const question = document.getElementById("question").value.trim();
+      const resultBox = document.getElementById("documentResult");
+      const file = pdfInput.files[0];
+
+      if (!file) {
+        resultBox.innerHTML = '<div class="error">Lütfen önce bir PDF seçin.</div>';
+        return;
+      }
+
+      if (!question) {
+        resultBox.innerHTML = '<div class="error">Lütfen bir soru yazın.</div>';
+        return;
+      }
+
+      resultBox.innerHTML = '<div class="loading">Doküman işleniyor...</div>';
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("question", question);
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/ask-document", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error("Sunucu hatası");
+        }
+
+        const data = await response.json();
+        resultBox.innerHTML = renderSourcesResult(data, question);
+      } catch (error) {
+        resultBox.innerHTML = '<div class="error">PDF analizi sırasında hata oluştu.</div>';
+      }
+    }
+
+    async function askText() {
+      const question = document.getElementById("textQuestion").value.trim();
+      const resultBox = document.getElementById("textResult");
+
+      if (!question) {
+        resultBox.innerHTML = '<div class="error">Lütfen bir soru sorun.</div>';
+        return;
+      }
+
+      resultBox.innerHTML = '<div class="loading">Cevap oluşturuluyor...</div>';
+
+      const formData = new FormData();
+      formData.append("question", question);
+
+      try {
+        const response = await fetch("http://127.0.0.1:8000/ask-text", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error("Sunucu hatası");
+        }
+
+        const data = await response.json();
+
+        resultBox.innerHTML = `
+          <p><strong>Soru:</strong> ${data.question ?? question}</p>
+          <p><strong>Cevap:</strong> ${data.answer ?? "-"}</p>
+        `;
+      } catch (error) {
+        resultBox.innerHTML = '<div class="error">Metin tabanlı soru sırasında hata oluştu.</div>';
+      }
+    }
+
+    
+    async function handleMainInput() {
+    const text = document.getElementById("mainPrompt").value.trim();
+    const fileInput = document.getElementById("mainFile");
+    const file = fileInput.files[0];
+    const resultBox = document.getElementById("mainResult");
+    const mainImagePreview = document.getElementById("mainImagePreview");
+    const mainGradcamPreview = document.getElementById("mainGradcamPreview");
+
+    mainImagePreview.style.display = "none";
+    mainGradcamPreview.style.display = "none";
+
+    if (!file && !text) {
+      resultBox.innerHTML = '<div class="error">Bir metin yazın veya dosya seçin.</div>';
+      return;
+    }
+
+    resultBox.innerHTML = '<div class="loading">İşleniyor...</div>';
+
+    const formData = new FormData();
+    if (text) formData.append("question", text);
+    if (file) formData.append("file", file);
+
+    if (file && file.type.startsWith("image/")) {
+      mainImagePreview.src = URL.createObjectURL(file);
+      mainImagePreview.style.display = "block";
+    }
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/multi-query", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error("Sunucu hatası");
+      }
+
+      const data = await response.json();
+
+      resultBox.innerHTML = `
+  <p><strong>Mod:</strong> ${data.mode ?? "-"}</p>
+  <p><strong>Soru:</strong> ${data.question ?? "-"}</p>
+  <p><strong>Cevap:</strong><br>${(data.answer ?? "-").replace(/\n/g, "<br>")}</p>
+  ${
+    data.file_type ? `<p><strong>Dosya Türü:</strong> ${data.file_type}</p>` : ""
+  }
+  ${
+    data.label ? `<p><strong>Tahmin:</strong> ${data.label}</p>` : ""
+  }
+  ${
+    data.confidence !== undefined && data.confidence !== null
+      ? `<p><strong>Güven Oranı:</strong> %${data.confidence}</p>`
+      : ""
+  }
+  ${
+    data.explanation ? `<p><strong>Açıklama:</strong> ${data.explanation}</p>` : ""
+  }
+  ${
+    data.sources && data.sources.length > 0
+      ? `
+        <p><strong>Kaynaklar:</strong></p>
+        ${data.sources.map((item, i) => `
+          <div style="margin-top:10px; padding:10px; background:white; border:1px solid #ddd; border-radius:10px;">
+            <strong>Kaynak ${i + 1}</strong>${item.score !== undefined ? ` (skor: ${Number(item.score).toFixed(3)})` : ""}<br><br>
+            ${item.chunk ? item.chunk.replace(/\n/g, "<br>") : "-"}
+          </div>
+        `).join("")}
+      `
+      : ""
+  }
+`;
+
+if (data.gradcam) {
+  mainGradcamPreview.src = "data:image/jpeg;base64," + data.gradcam;
+  mainGradcamPreview.style.display = "block";
+}
+    } catch (error) {
+      resultBox.innerHTML = '<div class="error">Ana bar üzerinden multi-query sırasında hata oluştu.</div>';
+    }
+  }
+
+  function renderSourcesResult(data, fallbackQuestion) {
+    return `
+      <p><strong>Mod:</strong> ${data.mode ?? "-"}</p>
+      <p><strong>Soru:</strong> ${data.question ?? fallbackQuestion}</p>
+      <p><strong>Cevap:</strong><br>${(data.answer ?? "-").replace(/\n/g, "<br>")}</p>
+      ${
+        data.file_type ? `<p><strong>Dosya Türü:</strong> ${data.file_type}</p>` : ""
+      }
+      <p><strong>Kaynaklar:</strong></p>
+      ${
+        data.sources && data.sources.length > 0
+          ? data.sources.map((item, i) => `
+            <div style="margin-top:10px; padding:10px; background:white; border:1px solid #ddd; border-radius:10px;">
+              <strong>Kaynak ${i + 1}</strong>${item.score !== undefined ? ` (skor: ${Number(item.score).toFixed(3)})` : ""}<br><br>
+              ${item.chunk ? item.chunk.replace(/\n/g, "<br>") : "-"}
+            </div>
+          `).join("")
+          : "Kaynak bulunamadı."
+      }
+    `;
+  }
+</script>
+</body>
+</html>
